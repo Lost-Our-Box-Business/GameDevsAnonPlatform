@@ -23,51 +23,8 @@ async function githubGraphQL(query: string, variables: Record<string, unknown>) 
   return json.data
 }
 
-const PROJECT_QUERY = /* graphql */`
-  query GetProject($owner: String!, $number: Int!, $ownerType: String!) {
-    userOrOrg: repositoryOwner(login: $owner) {
-      ... on User {
-        projectV2(number: $number) @include(if: $isUser) {
-          items(first: 100) { ...ItemFields }
-        }
-      }
-      ... on Organization {
-        projectV2(number: $number) @include(if: $isOrg) {
-          items(first: 100) { ...ItemFields }
-        }
-      }
-    }
-  }
-  fragment ItemFields on ProjectV2ItemConnection {
-    nodes {
-      id
-      content {
-        ... on Issue {
-          number
-          title
-          body
-          url
-          assignees(first: 3) { nodes { login } }
-          labels(first: 5) { nodes { name } }
-        }
-        ... on DraftIssue {
-          title
-          body
-        }
-      }
-      fieldValues(first: 10) {
-        nodes {
-          ... on ProjectV2ItemFieldSingleSelectValue {
-            name
-            field { ... on ProjectV2SingleSelectField { name } }
-          }
-        }
-      }
-    }
-  }
-`
+// Query issues from the repo, including project field values (Status + Point value)
 
-// Simpler approach: query issues from the repo directly for repos we know
 const ISSUES_QUERY = /* graphql */`
   query GetIssues($owner: String!, $name: String!, $after: String) {
     repository(owner: $owner, name: $name) {
@@ -89,6 +46,10 @@ const ISSUES_QUERY = /* graphql */`
                   ... on ProjectV2ItemFieldSingleSelectValue {
                     name
                     field { ... on ProjectV2SingleSelectField { name } }
+                  }
+                  ... on ProjectV2ItemFieldNumberValue {
+                    number
+                    field { ... on ProjectV2NumberField { name } }
                   }
                 }
               }
@@ -164,9 +125,13 @@ export const handler: Handler = async (event) => {
     const taskRecords = issues.map((issue: any) => {
       const assigneeLogin = issue.assignees?.nodes?.[0]?.login
       const projectItem = issue.projectItems?.nodes?.[0]
-      const statusField = projectItem?.fieldValues?.nodes?.find(
-        (fv: any) => fv?.field?.name === 'Status'
-      )
+      const fieldNodes = projectItem?.fieldValues?.nodes ?? []
+
+      const statusField = fieldNodes.find((fv: any) => fv?.field?.name === 'Status')
+      const pointField = fieldNodes.find((fv: any) => fv?.field?.name === 'Point value')
+
+      // Prefer GitHub's Point value; fall back to manually-set Supabase value
+      const points = pointField?.number ?? pointsMap.get(issue.number) ?? 0
 
       return {
         project_id: projectId,
@@ -177,7 +142,7 @@ export const handler: Handler = async (event) => {
         status: statusField?.name ?? (issue.state === 'CLOSED' ? 'Done' : 'Todo'),
         assignee_github_username: assigneeLogin ?? null,
         assignee_user_id: assigneeLogin ? (userMap.get(assigneeLogin.toLowerCase()) ?? null) : null,
-        points: pointsMap.get(issue.number) ?? 0,
+        points,
         labels: issue.labels?.nodes?.map((l: any) => l.name) ?? [],
         html_url: issue.url,
         last_synced_at: new Date().toISOString(),

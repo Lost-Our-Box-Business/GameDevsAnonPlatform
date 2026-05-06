@@ -54,20 +54,35 @@ export function Dashboard({ boardView = false }: Props) {
     const [
       { data: meetings },
       { data: tasks },
-      { data: myLedger },
-      { data: totalLedger },
+      { data: bonusLedger },
     ] = await Promise.all([
       supabase.from('meetings').select('*').eq('project_id', proj.id).gte('date', now).order('date').limit(1),
       supabase.from('github_tasks').select('*').eq('project_id', proj.id).order('status'),
-      supabase.from('point_ledger').select('points').eq('project_id', proj.id).eq('user_id', session.user.id),
-      supabase.from('point_ledger').select('points').eq('project_id', proj.id),
+      // Social post + bonus points that aren't tied to a specific task
+      supabase.from('point_ledger').select('user_id, points').eq('project_id', proj.id).neq('source', 'task'),
     ])
 
+    const allTasksData = tasks ?? []
+    const completedStatuses = ['Done', 'In Review']
+    const earnedTasks = allTasksData.filter(t => completedStatuses.includes(t.status ?? ''))
+
+    // Task points: sum points on completed/reviewed tasks
+    const myTaskPoints = earnedTasks
+      .filter(t => t.assignee_user_id === session.user.id)
+      .reduce((s, t) => s + t.points, 0)
+    const totalTaskPoints = earnedTasks.reduce((s, t) => s + t.points, 0)
+
+    // Bonus/social points from ledger
+    const myBonusPoints = (bonusLedger ?? [])
+      .filter(e => e.user_id === session.user.id)
+      .reduce((s, e) => s + e.points, 0)
+    const totalBonusPoints = (bonusLedger ?? []).reduce((s, e) => s + e.points, 0)
+
     setNextMeeting(meetings?.[0] ?? null)
-    setAllTasks(tasks ?? [])
-    setMyTasks((tasks ?? []).filter(t => t.assignee_user_id === session.user.id))
-    setMyPoints((myLedger ?? []).reduce((s, e) => s + e.points, 0))
-    setTotalPoints((totalLedger ?? []).reduce((s, e) => s + e.points, 0))
+    setAllTasks(allTasksData)
+    setMyTasks(allTasksData.filter(t => t.assignee_user_id === session.user.id))
+    setMyPoints(myTaskPoints + myBonusPoints)
+    setTotalPoints(totalTaskPoints + totalBonusPoints)
     setLoading(false)
   }, [slug, session, user])
 
