@@ -47,7 +47,7 @@ const ORG_PROJECT_QUERY = /* graphql */`
                 }
                 ... on ProjectV2ItemFieldNumberValue {
                   number
-                  field { ... on ProjectV2NumberField { name } }
+                  field { ... on ProjectV2Field { name } }
                 }
               }
             }
@@ -82,7 +82,7 @@ const USER_PROJECT_QUERY = /* graphql */`
                 }
                 ... on ProjectV2ItemFieldNumberValue {
                   number
-                  field { ... on ProjectV2NumberField { name } }
+                  field { ... on ProjectV2Field { name } }
                 }
               }
             }
