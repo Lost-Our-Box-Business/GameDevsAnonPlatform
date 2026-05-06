@@ -23,34 +23,66 @@ async function githubGraphQL(query: string, variables: Record<string, unknown>) 
   return json.data
 }
 
-// Query issues from the repo, including project field values (Status + Point value)
+const ORG_PROJECT_QUERY = /* graphql */`
+  query GetOrgProject($owner: String!, $number: Int!, $after: String) {
+    organization(login: $owner) {
+      projectV2(number: $number) {
+        items(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id
+            content {
+              ... on Issue {
+                number title body url state
+                assignees(first: 3) { nodes { login } }
+                labels(first: 5) { nodes { name } }
+              }
+              ... on DraftIssue { title body }
+            }
+            fieldValues(first: 15) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2SingleSelectField { name } }
+                }
+                ... on ProjectV2ItemFieldNumberValue {
+                  number
+                  field { ... on ProjectV2NumberField { name } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
 
-const ISSUES_QUERY = /* graphql */`
-  query GetIssues($owner: String!, $name: String!, $after: String) {
-    repository(owner: $owner, name: $name) {
-      issues(first: 100, after: $after, states: [OPEN, CLOSED]) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          number
-          title
-          body
-          url
-          state
-          assignees(first: 3) { nodes { login } }
-          labels(first: 5) { nodes { name } }
-          projectItems(first: 5) {
-            nodes {
-              id
-              fieldValues(first: 10) {
-                nodes {
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field { ... on ProjectV2SingleSelectField { name } }
-                  }
-                  ... on ProjectV2ItemFieldNumberValue {
-                    number
-                    field { ... on ProjectV2NumberField { name } }
-                  }
+const USER_PROJECT_QUERY = /* graphql */`
+  query GetUserProject($owner: String!, $number: Int!, $after: String) {
+    user(login: $owner) {
+      projectV2(number: $number) {
+        items(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id
+            content {
+              ... on Issue {
+                number title body url state
+                assignees(first: 3) { nodes { login } }
+                labels(first: 5) { nodes { name } }
+              }
+              ... on DraftIssue { title body }
+            }
+            fieldValues(first: 15) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2SingleSelectField { name } }
+                }
+                ... on ProjectV2ItemFieldNumberValue {
+                  number
+                  field { ... on ProjectV2NumberField { name } }
                 }
               }
             }
@@ -82,28 +114,33 @@ export const handler: Handler = async (event) => {
     return { statusCode: 404, headers, body: JSON.stringify({ error: 'Project not found' }) }
   }
 
-  if (!project.github_repo_owner || !project.github_repo_name) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Project missing GitHub config' }) }
+  if (!project.github_repo_owner || !project.github_project_number) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Project missing GitHub project number config' }) }
   }
 
+  const isOrg = project.github_project_owner_type === 'org'
+  const query = isOrg ? ORG_PROJECT_QUERY : USER_PROJECT_QUERY
+
   try {
-    // Fetch all issues from the repository
-    const issues: any[] = []
+    // Fetch all project items directly from the GitHub project board
+    const items: any[] = []
     let after: string | null = null
 
     do {
-      const data = await githubGraphQL(ISSUES_QUERY, {
+      const data = await githubGraphQL(query, {
         owner: project.github_repo_owner,
-        name: project.github_repo_name,
+        number: project.github_project_number,
         after,
       })
-      const page = data.repository?.issues
+      const projectData = isOrg ? data.organization?.projectV2 : data.user?.projectV2
+      if (!projectData) throw new Error('Project not found on GitHub — check owner, number, and owner type')
+      const page = projectData.items
       if (!page) break
-      issues.push(...page.nodes)
+      items.push(...page.nodes)
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null
     } while (after)
 
-    // Fetch existing tasks to preserve point values
+    // Fetch existing tasks to preserve manually-set point values
     const { data: existingTasks } = await supabase
       .from('github_tasks')
       .select('github_issue_number, points')
@@ -121,33 +158,47 @@ export const handler: Handler = async (event) => {
 
     const userMap = new Map((users ?? []).map(u => [u.github_username?.toLowerCase(), u.id]))
 
-    // Transform issues into task records
-    const taskRecords = issues.map((issue: any) => {
-      const assigneeLogin = issue.assignees?.nodes?.[0]?.login
-      const projectItem = issue.projectItems?.nodes?.[0]
-      const fieldNodes = projectItem?.fieldValues?.nodes ?? []
+    // Collect all unique field names seen (for debugging)
+    const fieldsFound = new Set<string>()
 
-      const statusField = fieldNodes.find((fv: any) => fv?.field?.name === 'Status')
-      const pointField = fieldNodes.find((fv: any) => fv?.field?.name === 'Point value')
+    // Transform project items into task records (skip draft issues with no issue number)
+    const taskRecords = items
+      .filter((item: any) => item.content?.number != null)
+      .map((item: any) => {
+        const issue = item.content
+        const assigneeLogin = issue.assignees?.nodes?.[0]?.login
+        const fieldNodes: any[] = item.fieldValues?.nodes ?? []
 
-      // Prefer GitHub's Point value; fall back to manually-set Supabase value
-      const points = pointField?.number ?? pointsMap.get(issue.number) ?? 0
+        fieldNodes.forEach((fv: any) => {
+          const name = fv?.field?.name
+          if (name) fieldsFound.add(name)
+        })
 
-      return {
-        project_id: projectId,
-        github_issue_number: issue.number,
-        github_project_item_id: projectItem?.id ?? `issue-${issue.number}`,
-        title: issue.title,
-        description: (issue.body ?? '').slice(0, 2000) || null,
-        status: statusField?.name ?? (issue.state === 'CLOSED' ? 'Done' : 'Todo'),
-        assignee_github_username: assigneeLogin ?? null,
-        assignee_user_id: assigneeLogin ? (userMap.get(assigneeLogin.toLowerCase()) ?? null) : null,
-        points,
-        labels: issue.labels?.nodes?.map((l: any) => l.name) ?? [],
-        html_url: issue.url,
-        last_synced_at: new Date().toISOString(),
-      }
-    })
+        const statusField = fieldNodes.find(
+          (fv: any) => fv?.field?.name?.toLowerCase() === 'status'
+        )
+        const pointField = fieldNodes.find(
+          (fv: any) => fv?.field?.name?.toLowerCase() === 'point value'
+        )
+
+        // Prefer GitHub's Point value field; fall back to manually-set Supabase value
+        const points = pointField?.number ?? pointsMap.get(issue.number) ?? 0
+
+        return {
+          project_id: projectId,
+          github_issue_number: issue.number,
+          github_project_item_id: item.id,
+          title: issue.title,
+          description: (issue.body ?? '').slice(0, 2000) || null,
+          status: statusField?.name ?? (issue.state === 'CLOSED' ? 'Done' : 'Todo'),
+          assignee_github_username: assigneeLogin ?? null,
+          assignee_user_id: assigneeLogin ? (userMap.get(assigneeLogin.toLowerCase()) ?? null) : null,
+          points,
+          labels: issue.labels?.nodes?.map((l: any) => l.name) ?? [],
+          html_url: issue.url,
+          last_synced_at: new Date().toISOString(),
+        }
+      })
 
     if (taskRecords.length > 0) {
       const { error: upsertError } = await supabase
@@ -160,7 +211,10 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ synced: taskRecords.length }),
+      body: JSON.stringify({
+        synced: taskRecords.length,
+        fields_found: Array.from(fieldsFound).sort(),
+      }),
     }
   } catch (err: any) {
     console.error('GitHub sync error:', err)
