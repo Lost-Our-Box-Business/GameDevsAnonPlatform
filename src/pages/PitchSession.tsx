@@ -265,7 +265,13 @@ export function PitchSessionPage() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ sessionId }),
       })
-      if (!res.ok) {
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const failedEmails: string[] = body.errors ?? []
+        if (failedEmails.length) {
+          setOpenVotingError(`${body.sent} sent, ${failedEmails.length} failed — check admin feedback panel to resend`)
+        }
+      } else {
         const err = await res.json().catch(() => ({}))
         setOpenVotingError(err.error ?? 'Failed to send feedback emails')
       }

@@ -83,8 +83,14 @@ export function PitchAdmin() {
         body: JSON.stringify({ sessionId: selected.id, sendOnly: true }),
       })
       if (res.ok) {
-        setResendOk(true)
-        setTimeout(() => setResendOk(false), 3000)
+        const body = await res.json().catch(() => ({}))
+        const failedEmails: string[] = body.errors ?? []
+        if (failedEmails.length) {
+          setResendError(`Sent ${body.sent}, failed: ${failedEmails.join('; ')}`)
+        } else {
+          setResendOk(true)
+          setTimeout(() => setResendOk(false), 4000)
+        }
       } else {
         const err = await res.json().catch(() => ({}))
         setResendError(err.error ?? 'Failed to send emails')

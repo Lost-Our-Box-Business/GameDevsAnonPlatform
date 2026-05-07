@@ -51,27 +51,33 @@ export const handler: Handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ sent: 0 }) }
   }
 
-  // Load all feedback for this session with user display names
+  // Load feedback — no user join; respondent identity is kept anonymous in emails
   const { data: allFeedback } = await supabase
     .from('pitch_feedback')
-    .select('*, users(display_name)')
+    .select('pitch_item_id, feasibility, originality, money_potential, fun_to_play, fun_to_make, pitching_skills, comments')
     .eq('session_id', sessionId)
 
+  const fromAddress = process.env.RESEND_FROM_EMAIL
+  if (!fromAddress) {
+    console.error('[send-pitch-feedback] RESEND_FROM_EMAIL env var is not set — emails cannot be delivered')
+  }
+
   let sent = 0
+  const errors: string[] = []
 
   for (const item of pitchItems) {
     const feedbackRows = (allFeedback ?? []).filter(f => f.pitch_item_id === item.id)
     if (!feedbackRows.length) continue
 
     const rows = feedbackRows.map((f, idx) => {
-      const name = (f.users as any)?.display_name ?? `Attendee ${idx + 1}`
+      const label = `Attendee ${idx + 1}`
       const ratings = FEEDBACK_FIELDS
-        .map(({ key, label }) => `${label}: ${f[key] ?? '—'}/5`)
+        .map(({ key, label: fieldLabel }) => `${fieldLabel}: ${(f as any)[key] ?? '—'}/5`)
         .join(' &nbsp;|&nbsp; ')
       const comments = f.comments ? `<br><em style="color:#9ca3af">"${f.comments}"</em>` : ''
       return `
         <tr style="border-bottom:1px solid #27272a">
-          <td style="padding:10px 0;color:#a1a1aa;font-size:13px;white-space:nowrap;padding-right:16px">${name}</td>
+          <td style="padding:10px 0;color:#a1a1aa;font-size:13px;white-space:nowrap;padding-right:16px">${label}</td>
           <td style="padding:10px 0;color:#e4e4e7;font-size:13px">${ratings}${comments}</td>
         </tr>`
     }).join('')
@@ -86,25 +92,33 @@ export const handler: Handler = async (event) => {
           <p style="color:#71717a;font-size:14px;margin:0 0 24px">Pitched by ${item.pitcher_name}</p>
           <p style="color:#a1a1aa;font-size:14px;margin:0 0 16px">Here is the anonymous feedback your pitch received from session attendees:</p>
           <table style="width:100%;border-collapse:collapse">${rows}</table>
-          <p style="color:#52525b;font-size:12px;margin:24px 0 0">This feedback was compiled automatically at the end of the pitch day session.</p>
+          <p style="color:#52525b;font-size:12px;margin:24px 0 0">This feedback was compiled automatically at the end of the pitch day session. Respondent identities are kept anonymous.</p>
         </div>
       </body>
       </html>`
 
-    if (!resend) {
-      console.log(`[send-pitch-feedback] RESEND_API_KEY not set — skipping email to ${item.pitcher_email}`)
+    if (!resend || !fromAddress) {
+      console.log(`[send-pitch-feedback] Skipping email to ${item.pitcher_email} — RESEND_API_KEY or RESEND_FROM_EMAIL not set`)
+      errors.push(`${item.pitcher_email}: missing env vars`)
       continue
     }
     try {
-      await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL ?? 'noreply@resend.dev',
+      const result = await resend.emails.send({
+        from: fromAddress,
         to: item.pitcher_email,
         subject: `Feedback for "${item.name}" — Lost Our Box Pitch Day`,
         html,
       })
-      sent++
-    } catch (err) {
+      if (result.error) {
+        console.error(`Resend rejected email to ${item.pitcher_email}:`, result.error)
+        errors.push(`${item.pitcher_email}: ${result.error.message ?? JSON.stringify(result.error)}`)
+      } else {
+        console.log(`Sent to ${item.pitcher_email}, id=${result.data?.id}`)
+        sent++
+      }
+    } catch (err: any) {
       console.error(`Failed to send to ${item.pitcher_email}:`, err)
+      errors.push(`${item.pitcher_email}: ${err?.message ?? 'unknown error'}`)
     }
   }
 
@@ -119,6 +133,6 @@ export const handler: Handler = async (event) => {
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sent }),
+    body: JSON.stringify({ sent, errors }),
   }
 }
