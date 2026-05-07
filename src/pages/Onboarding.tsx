@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import SignatureCanvas from 'react-signature-canvas'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../types'
 import { useAuthContext } from '../contexts/AuthContext'
-import { Check, GitBranch, MessageSquare, HardDrive, ArrowRight, FileText, Copy, ChevronRight } from 'lucide-react'
+import { Check, GitBranch, MessageSquare, HardDrive, ArrowRight, FileText, Copy, ChevronRight, RotateCcw } from 'lucide-react'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -38,7 +39,8 @@ export function Onboarding() {
 
   // Step 3 fields
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
-  const [agreed, setAgreed] = useState(false)
+  const [isSigned, setIsSigned] = useState(false)
+  const sigCanvas = useRef<SignatureCanvas>(null)
 
   useEffect(() => {
     if (user) {
@@ -107,7 +109,10 @@ export function Onboarding() {
   }
 
   async function saveStep3() {
-    if (!agreed) { setError('Please read and check the agreement box.'); return }
+    if (!isSigned || sigCanvas.current?.isEmpty()) {
+      setError('Please draw your signature before continuing.')
+      return
+    }
     setSaving(true)
     setError('')
 
@@ -116,9 +121,26 @@ export function Onboarding() {
       .then(d => d.ip)
       .catch(() => 'unknown')
 
+    // Convert canvas to PNG blob and upload to Supabase Storage
+    const dataUrl = sigCanvas.current!.toDataURL('image/png')
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const path = `${project!.id}/${session!.user.id}.png`
+
+    const { error: uploadError } = await supabase.storage
+      .from('agreements')
+      .upload(path, blob, { contentType: 'image/png', upsert: true })
+
+    let signatureUrl: string | null = null
+    if (!uploadError) {
+      const { data: urlData } = supabase.storage.from('agreements').getPublicUrl(path)
+      signatureUrl = urlData.publicUrl
+    }
+
     await supabase.from('project_members').update({
       agreement_acknowledged_at: new Date().toISOString(),
       agreement_ip: ip,
+      agreement_signature_url: signatureUrl,
     }).eq('project_id', project!.id).eq('user_id', session!.user.id)
 
     setSaving(false)
@@ -246,10 +268,10 @@ export function Onboarding() {
           <div>
             <h2 className="text-xl font-bold text-white mb-1">Profit Share Agreement</h2>
             <p className="text-zinc-400 text-sm mb-4">
-              Please read the full agreement below. Your points earned on this project determine your share of any revenue it generates.
+              Read the agreement below, then draw your signature to acknowledge and agree.
             </p>
             <div
-              className="bg-zinc-950 border border-zinc-700 rounded-xl p-4 max-h-80 overflow-y-auto text-sm text-zinc-300 leading-relaxed mb-4 whitespace-pre-wrap"
+              className="bg-zinc-950 border border-zinc-700 rounded-xl p-4 max-h-64 overflow-y-auto text-sm text-zinc-300 leading-relaxed mb-5 whitespace-pre-wrap"
               onScroll={e => {
                 const el = e.currentTarget
                 if (el.scrollHeight - el.scrollTop <= el.clientHeight + 50) setScrolledToBottom(true)
@@ -257,20 +279,36 @@ export function Onboarding() {
             >
               {project.profit_share_text ?? 'Profit share agreement text will be added by the project admin. Please check back or contact Brandon directly.'}
             </div>
-            <label className="flex items-start gap-3 cursor-pointer mb-4">
-              <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
-                className="w-4 h-4 mt-0.5 accent-purple-500" />
-              <span className="text-zinc-300 text-sm">
-                I have read and agree to the profit share agreement for <strong className="text-white">{project.title}</strong>. I understand a formal copy will be sent to my email to sign.
-              </span>
-            </label>
-            {!scrolledToBottom && !agreed && (
-              <p className="text-amber-400 text-xs mb-3">Scroll through the entire agreement before checking the box.</p>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-zinc-400 text-sm">Sign below</label>
+                <button
+                  type="button"
+                  onClick={() => { sigCanvas.current?.clear(); setIsSigned(false) }}
+                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" /> Clear
+                </button>
+              </div>
+              <div className="rounded-xl border border-zinc-700 overflow-hidden bg-white">
+                <SignatureCanvas
+                  ref={sigCanvas}
+                  penColor="#1a1a2e"
+                  canvasProps={{ className: 'w-full', height: 140 }}
+                  onEnd={() => setIsSigned(true)}
+                />
+              </div>
+              <p className="text-zinc-600 text-xs mt-1.5">Draw your signature with mouse or finger</p>
+            </div>
+
+            {!scrolledToBottom && !isSigned && (
+              <p className="text-amber-400 text-xs mb-3">Scroll through the entire agreement, then sign above.</p>
             )}
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-            <button onClick={saveStep3} disabled={saving || !agreed}
+            <button onClick={saveStep3} disabled={saving || !isSigned}
               className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors w-full">
-              Agree & Continue <ChevronRight className="w-4 h-4" />
+              {saving ? 'Saving…' : <><Check className="w-4 h-4" /> Agree & Sign</>}
             </button>
           </div>
         )}
@@ -335,9 +373,6 @@ export function Onboarding() {
                 )}
               </div>
 
-              <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-300">
-                A formal profit share agreement will be emailed to you within 48 hours. Please sign it when you receive it.
-              </div>
             </div>
 
             <button onClick={completeOnboarding}

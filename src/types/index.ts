@@ -43,6 +43,7 @@ export interface ProjectMember {
   joined_at: string
   agreement_acknowledged_at: string | null
   agreement_ip: string | null
+  agreement_signature_url: string | null
   onboarding_completed_at: string | null
   users?: User
 }
