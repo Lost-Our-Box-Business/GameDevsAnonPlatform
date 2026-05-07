@@ -141,6 +141,7 @@ export interface PitchSession {
   current_pitch_item_id: string | null
   current_sub_phase: PitchSubPhase | null
   phase_started_at: string | null
+  tiebreaker_item_ids: string[] | null
   created_by: string | null
   created_at: string
 }

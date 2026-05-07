@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   seconds: number
@@ -6,9 +6,10 @@ interface Props {
   onExpire?: () => void
 }
 
-function playBeep() {
+async function playBeep() {
   try {
     const ctx = new AudioContext()
+    await ctx.resume() // unblock autoplay policy
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)
@@ -25,20 +26,22 @@ function playBeep() {
 
 export function PitchTimer({ seconds, startedAt, onExpire }: Props) {
   const [remaining, setRemaining] = useState(seconds)
-  const [expired, setExpired] = useState(false)
+  const firedRef = useRef(false) // ref avoids stale-closure bug with useState
 
   useEffect(() => {
-    setExpired(false)
+    firedRef.current = false
+
     const tick = () => {
       const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000
       const left = Math.max(0, seconds - elapsed)
       setRemaining(left)
-      if (left === 0 && !expired) {
-        setExpired(true)
+      if (left === 0 && !firedRef.current) {
+        firedRef.current = true
         playBeep()
         onExpire?.()
       }
     }
+
     tick()
     const id = setInterval(tick, 500)
     return () => clearInterval(id)

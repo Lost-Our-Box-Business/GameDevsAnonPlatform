@@ -47,15 +47,27 @@ export function Profile() {
       const projectIds = memberships.map(m => m.project_id)
       const projects = memberships.map(m => (m as any).projects as Project)
 
-      const [{ data: allLedger }, { data: allRevenue }] = await Promise.all([
-        supabase.from('point_ledger').select('project_id, user_id, points').in('project_id', projectIds),
+      const completedStatuses = ['Done', 'In Review']
+      const [{ data: allLedger }, { data: allRevenue }, { data: allTasks }] = await Promise.all([
+        supabase.from('point_ledger').select('project_id, user_id, points').in('project_id', projectIds).neq('source', 'task'),
         supabase.from('project_revenue').select('project_id, amount_cents, currency').in('project_id', projectIds),
+        supabase.from('github_tasks').select('project_id, assignee_user_id, points, status').in('project_id', projectIds),
       ])
 
+      const earnedTasks = (allTasks ?? []).filter(t => completedStatuses.includes(t.status ?? ''))
+
       const summaries: ProjectSummary[] = projects.map(proj => {
+        // Task points (from completed GitHub tasks)
+        const projTasks = earnedTasks.filter(t => t.project_id === proj.id)
+        const myTaskPts = projTasks.filter(t => t.assignee_user_id === session.user.id).reduce((s, t) => s + t.points, 0)
+        const totalTaskPts = projTasks.reduce((s, t) => s + t.points, 0)
+        // Bonus/social points from ledger
         const projLedger = (allLedger ?? []).filter(e => e.project_id === proj.id)
-        const myPts = projLedger.filter(e => e.user_id === session.user.id).reduce((s, e) => s + e.points, 0)
-        const totalPts = projLedger.reduce((s, e) => s + e.points, 0)
+        const myBonusPts = projLedger.filter(e => e.user_id === session.user.id).reduce((s, e) => s + e.points, 0)
+        const totalBonusPts = projLedger.reduce((s, e) => s + e.points, 0)
+
+        const myPts = myTaskPts + myBonusPts
+        const totalPts = totalTaskPts + totalBonusPts
         const projRevenue = (allRevenue ?? []).filter(r => r.project_id === proj.id)
         const totalRevenue = projRevenue.reduce((s, r) => s + r.amount_cents, 0)
         const myRevenue = totalPts > 0 ? (myPts / totalPts) * totalRevenue : 0

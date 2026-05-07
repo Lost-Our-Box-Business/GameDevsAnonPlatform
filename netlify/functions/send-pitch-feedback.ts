@@ -35,7 +35,7 @@ export const handler: Handler = async (event) => {
     return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) }
   }
 
-  const { sessionId } = JSON.parse(event.body ?? '{}')
+  const { sessionId, sendOnly } = JSON.parse(event.body ?? '{}')
   if (!sessionId) return { statusCode: 400, body: JSON.stringify({ error: 'sessionId required' }) }
 
   // Load session
@@ -45,8 +45,9 @@ export const handler: Handler = async (event) => {
   // Load all pitch items
   const { data: pitchItems } = await supabase.from('pitch_items').select('*').eq('session_id', sessionId).order('order_index')
   if (!pitchItems?.length) {
-    // No items — just advance to voting
-    await supabase.from('pitch_sessions').update({ status: 'voting', phase_started_at: session.voting_timer_seconds ? new Date().toISOString() : null }).eq('id', sessionId)
+    if (!sendOnly) {
+      await supabase.from('pitch_sessions').update({ status: 'voting', phase_started_at: session.voting_timer_seconds ? new Date().toISOString() : null }).eq('id', sessionId)
+    }
     return { statusCode: 200, body: JSON.stringify({ sent: 0 }) }
   }
 
@@ -107,11 +108,13 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Advance session to voting
-  await supabase.from('pitch_sessions').update({
-    status: 'voting',
-    phase_started_at: session.voting_timer_seconds ? new Date().toISOString() : null,
-  }).eq('id', sessionId)
+  // Advance session to voting (skip if sendOnly — used for resending emails after the fact)
+  if (!sendOnly) {
+    await supabase.from('pitch_sessions').update({
+      status: 'voting',
+      phase_started_at: session.voting_timer_seconds ? new Date().toISOString() : null,
+    }).eq('id', sessionId)
+  }
 
   return {
     statusCode: 200,

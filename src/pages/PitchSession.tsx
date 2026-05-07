@@ -279,6 +279,23 @@ export function PitchSessionPage() {
     await updateSession({ status: 'closed' })
   }
 
+  async function reopenTiebreaker() {
+    if (!sessionId || !session) return
+    const counts = items.map(it => ({ id: it.id, count: votes.filter(v => v.pitch_item_id === it.id).length }))
+    const maxCount = Math.max(...counts.map(c => c.count), 0)
+    const tiedIds = counts.filter(c => c.count === maxCount && maxCount > 0).map(c => c.id)
+    setActionLoading(true)
+    await supabase.from('pitch_votes').delete().eq('session_id', sessionId)
+    const { data } = await supabase.from('pitch_sessions').update({
+      status: 'voting',
+      tiebreaker_item_ids: tiedIds,
+      phase_started_at: session.voting_timer_seconds ? new Date().toISOString() : null,
+    }).eq('id', sessionId).select().single()
+    if (data) setSession(data)
+    await loadVotes()
+    setActionLoading(false)
+  }
+
   async function addNewItem() {
     if (!newItem.name || !newItem.pitcher_name || !newItem.pitcher_email || !sessionId) return
     setActionLoading(true)
@@ -505,52 +522,63 @@ export function PitchSessionPage() {
       )}
 
       {/* ── VOTING PHASE ───────────────────────────────────────────────────── */}
-      {session.status === 'voting' && (
-        <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-semibold text-lg">Cast Your Vote</p>
-              <p className="text-zinc-500 text-sm">{totalVotes} total vote{totalVotes !== 1 ? 's' : ''} cast</p>
-              {user && <p className="text-zinc-500 text-xs mt-0.5">{userVoteCount} / {session.votes_per_user} vote{session.votes_per_user !== 1 ? 's' : ''} used</p>}
-            </div>
-            {session.voting_timer_seconds && session.phase_started_at && (
-              <div className="text-right">
-                <p className="text-zinc-500 text-xs mb-1">Time remaining</p>
-                <PitchTimer seconds={session.voting_timer_seconds} startedAt={session.phase_started_at}
-                  onExpire={isAdmin ? endVoting : undefined} />
+      {session.status === 'voting' && (() => {
+        const votingItems = session.tiebreaker_item_ids?.length
+          ? items.filter(it => session.tiebreaker_item_ids!.includes(it.id))
+          : items
+        return (
+          <div className="flex flex-col gap-6">
+            {session.tiebreaker_item_ids?.length ? (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-4 py-3 text-yellow-400 text-sm font-medium">
+                Tiebreaker — only the tied pitches are shown
               </div>
+            ) : null}
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white font-semibold text-lg">Cast Your Vote</p>
+                <p className="text-zinc-500 text-sm">{totalVotes} total vote{totalVotes !== 1 ? 's' : ''} cast</p>
+                {user && <p className="text-zinc-500 text-xs mt-0.5">{userVoteCount} / {session.votes_per_user} vote{session.votes_per_user !== 1 ? 's' : ''} used</p>}
+              </div>
+              {session.voting_timer_seconds && session.phase_started_at && (
+                <div className="text-right">
+                  <p className="text-zinc-500 text-xs mb-1">Time remaining</p>
+                  <PitchTimer seconds={session.voting_timer_seconds} startedAt={session.phase_started_at}
+                    onExpire={isAdmin ? endVoting : undefined} />
+                </div>
+              )}
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              {votingItems.map(it => {
+                const hasVoted = votes.some(v => v.pitch_item_id === it.id && v.user_id === user?.id)
+                const canVote = !hasVoted && userVoteCount < (session.votes_per_user ?? 1)
+                return (
+                  <div key={it.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-white font-medium">{it.name}</p>
+                      <p className="text-zinc-500 text-sm">{it.pitcher_name}</p>
+                    </div>
+                    <button onClick={() => toggleVote(it)} disabled={!canVote && !hasVoted}
+                      className={`w-full text-sm py-2 rounded-lg font-medium transition-colors ${
+                        !canVote && !hasVoted ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 text-white'
+                      }`}>
+                      Vote
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {isAdmin && (
+              <button onClick={endVoting} disabled={actionLoading}
+                className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors self-start">
+                End Voting
+              </button>
             )}
           </div>
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            {items.map(it => {
-              const hasVoted = votes.some(v => v.pitch_item_id === it.id && v.user_id === user?.id)
-              const canVote = !hasVoted && userVoteCount < (session.votes_per_user ?? 1)
-              return (
-                <div key={it.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
-                  <div>
-                    <p className="text-white font-medium">{it.name}</p>
-                    <p className="text-zinc-500 text-sm">{it.pitcher_name}</p>
-                  </div>
-                  <button onClick={() => toggleVote(it)} disabled={!canVote && !hasVoted}
-                    className={`w-full text-sm py-2 rounded-lg font-medium transition-colors ${
-                      !canVote && !hasVoted ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 text-white'
-                    }`}>
-                    Vote
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          {isAdmin && (
-            <button onClick={endVoting} disabled={actionLoading}
-              className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors self-start">
-              End Voting
-            </button>
-          )}
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── RESULTS ────────────────────────────────────────────────────────── */}
       {session.status === 'closed' && (
@@ -559,7 +587,7 @@ export function PitchSessionPage() {
           {session.result_display === 'pie_chart' || isAdmin ? (
             <PieChart items={items} votes={votes} />
           ) : (
-            <WinnerCard items={items} votes={votes} />
+            <WinnerCard items={items} votes={votes} isAdmin={isAdmin} onReopen={reopenTiebreaker} />
           )}
         </div>
       )}
@@ -594,10 +622,40 @@ function StatusBadge({ status, subPhase }: { status: string; subPhase: string | 
   return <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mt-1 ${color}`}>{label}</span>
 }
 
-function WinnerCard({ items, votes }: { items: PitchItem[]; votes: PitchVote[] }) {
+function WinnerCard({ items, votes, isAdmin, onReopen }: {
+  items: PitchItem[]; votes: PitchVote[]; isAdmin: boolean; onReopen: () => void
+}) {
   const counts = items.map(it => ({ it, count: votes.filter(v => v.pitch_item_id === it.id).length }))
-  const winner = counts.sort((a, b) => b.count - a.count)[0]
-  if (!winner || winner.count === 0) return <p className="text-zinc-500 text-sm">No votes recorded.</p>
+  const maxCount = Math.max(...counts.map(c => c.count), 0)
+  if (maxCount === 0) return <p className="text-zinc-500 text-sm">No votes recorded.</p>
+
+  const topItems = counts.filter(c => c.count === maxCount)
+
+  if (topItems.length > 1) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
+        <p className="text-4xl mb-3">🤝</p>
+        <p className="text-white font-bold text-2xl mb-2">It's a Tie!</p>
+        <p className="text-zinc-400 text-sm mb-5">These pitches are tied with {maxCount} vote{maxCount !== 1 ? 's' : ''} each:</p>
+        <div className="flex flex-col gap-2 mb-6 text-left max-w-xs mx-auto">
+          {topItems.map(({ it }) => (
+            <div key={it.id} className="bg-zinc-800 rounded-xl px-4 py-3">
+              <p className="text-white font-medium">{it.name}</p>
+              <p className="text-zinc-500 text-sm">{it.pitcher_name}</p>
+            </div>
+          ))}
+        </div>
+        {isAdmin && (
+          <button onClick={onReopen}
+            className="bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+            Reopen Tiebreaker Vote
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const winner = topItems[0]
   return (
     <div className="bg-gradient-to-br from-yellow-500/10 to-purple-500/10 border border-yellow-500/20 rounded-2xl p-8 text-center">
       <p className="text-4xl mb-3">🏆</p>

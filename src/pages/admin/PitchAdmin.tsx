@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { PitchSession, PitchItem } from '../../types'
-import { Plus, Trash2, Pencil, ExternalLink, ChevronLeft } from 'lucide-react'
+import { Plus, Trash2, Pencil, ExternalLink, ChevronLeft, Download, Mail } from 'lucide-react'
 
 const EMPTY_SETTINGS = {
   title: '',
@@ -34,6 +34,66 @@ export function PitchAdmin() {
   const [addingItem, setAddingItem] = useState(false)
   const [editItem, setEditItem] = useState<PitchItem | null>(null)
   const [editItemForm, setEditItemForm] = useState({ name: '', pitcher_name: '', pitcher_email: '' })
+
+  const [resending, setResending] = useState(false)
+  const [resendError, setResendError] = useState('')
+  const [resendOk, setResendOk] = useState(false)
+
+  async function downloadFeedbackCSV() {
+    if (!selected) return
+    const { data: feedback } = await supabase
+      .from('pitch_feedback')
+      .select('*, users(display_name), pitch_items(name, pitcher_name)')
+      .eq('session_id', selected.id)
+    if (!feedback?.length) { alert('No feedback to export.'); return }
+    const headers = ['Pitch', 'Pitcher', 'Respondent', 'Feasibility', 'Originality', 'Money Potential', 'Fun to Play', 'Fun to Make', 'Pitching Skills', 'Comments']
+    const rows = feedback.map(f => [
+      (f.pitch_items as any)?.name ?? '',
+      (f.pitch_items as any)?.pitcher_name ?? '',
+      (f.users as any)?.display_name ?? 'Anonymous',
+      f.feasibility ?? '',
+      f.originality ?? '',
+      f.money_potential ?? '',
+      f.fun_to_play ?? '',
+      f.fun_to_make ?? '',
+      f.pitching_skills ?? '',
+      f.comments ? `"${String(f.comments).replace(/"/g, '""')}"` : '',
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pitch-feedback-${selected.id.slice(0, 8)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function resendFeedbackEmails() {
+    if (!selected) return
+    setResending(true)
+    setResendError('')
+    setResendOk(false)
+    try {
+      const { data: { session: authSession } } = await supabase.auth.getSession()
+      const token = authSession?.access_token
+      const res = await fetch('/.netlify/functions/send-pitch-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ sessionId: selected.id, sendOnly: true }),
+      })
+      if (res.ok) {
+        setResendOk(true)
+        setTimeout(() => setResendOk(false), 3000)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setResendError(err.error ?? 'Failed to send emails')
+      }
+    } catch {
+      setResendError('Network error')
+    }
+    setResending(false)
+  }
 
   async function loadSessions() {
     const { data } = await supabase.from('pitch_sessions').select('*').order('created_at', { ascending: false })
@@ -317,6 +377,28 @@ export function PitchAdmin() {
           {items.length === 0 && <p className="text-zinc-500 text-sm py-2">No pitch items yet.</p>}
         </div>
       </section>
+
+      {/* Feedback export / resend — shown once session is underway */}
+      {selected.status !== 'setup' && (
+        <section className="mt-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Feedback</h2>
+            <div className="flex gap-2">
+              <button onClick={downloadFeedbackCSV}
+                className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500 transition-colors">
+                <Download className="w-3.5 h-3.5" /> Download CSV
+              </button>
+              <button onClick={resendFeedbackEmails} disabled={resending}
+                className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500 disabled:opacity-50 transition-colors">
+                <Mail className="w-3.5 h-3.5" /> {resending ? 'Sending…' : 'Resend Emails'}
+              </button>
+            </div>
+          </div>
+          {resendError && <p className="text-red-400 text-xs">{resendError}</p>}
+          {resendOk && <p className="text-emerald-400 text-xs">Emails sent successfully!</p>}
+          {!resendError && !resendOk && <p className="text-zinc-600 text-xs">Download feedback as a CSV backup, or resend feedback emails to pitchers.</p>}
+        </section>
+      )}
     </div>
   )
 }
