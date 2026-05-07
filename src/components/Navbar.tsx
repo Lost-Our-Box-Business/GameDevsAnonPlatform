@@ -25,6 +25,7 @@ export function Navbar() {
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-6 text-sm">
           <Link to="/projects" className="text-zinc-400 hover:text-white transition-colors">Projects</Link>
+          <Link to="/pitch" className="text-zinc-400 hover:text-white transition-colors">Pitch Day</Link>
           {session && (
             <Link to="/profile" className="text-zinc-400 hover:text-white transition-colors">Profile</Link>
           )}
@@ -61,6 +62,7 @@ export function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-zinc-800 bg-zinc-950 px-4 py-4 flex flex-col gap-4 text-sm">
           <Link to="/projects" className="text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>Projects</Link>
+          <Link to="/pitch" className="text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>Pitch Day</Link>
           {session && (
             <Link to="/profile" className="text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>Profile</Link>
           )}

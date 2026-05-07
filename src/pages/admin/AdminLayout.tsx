@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, Calendar, CheckSquare, Users, Share2, DollarSign } from 'lucide-react'
+import { LayoutDashboard, FolderOpen, Calendar, CheckSquare, Users, Share2, DollarSign, Mic } from 'lucide-react'
 
 const NAV = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/admin/members', icon: Users, label: 'Members' },
   { to: '/admin/social', icon: Share2, label: 'Social Posts' },
   { to: '/admin/revenue', icon: DollarSign, label: 'Revenue' },
+  { to: '/admin/pitch', icon: Mic, label: 'Pitch Day' },
 ]
 
 export function AdminLayout() {

@@ -122,3 +122,59 @@ export interface PointsSummary {
   totalPoints: number
   sharePercent: number
 }
+
+export type PitchSessionStatus = 'setup' | 'pitching' | 'voting' | 'closed'
+export type PitchSubPhase = 'presenting' | 'qa' | 'feedback'
+export type PitchResultDisplay = 'winner' | 'pie_chart'
+
+export interface PitchSession {
+  id: string
+  title: string
+  status: PitchSessionStatus
+  pitch_timer_seconds: number | null
+  qa_timer_seconds: number | null
+  voting_timer_seconds: number | null
+  enable_feedback: boolean
+  result_display: PitchResultDisplay
+  votes_per_user: number
+  max_votes_per_entry: number | null
+  current_pitch_item_id: string | null
+  current_sub_phase: PitchSubPhase | null
+  phase_started_at: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface PitchItem {
+  id: string
+  session_id: string
+  name: string
+  pitcher_name: string
+  pitcher_email: string
+  order_index: number
+  pitched_at: string | null
+  created_at: string
+}
+
+export interface PitchFeedback {
+  id: string
+  session_id: string
+  pitch_item_id: string
+  user_id: string
+  feasibility: number | null
+  originality: number | null
+  money_potential: number | null
+  fun_to_play: number | null
+  fun_to_make: number | null
+  pitching_skills: number | null
+  comments: string | null
+  created_at: string
+}
+
+export interface PitchVote {
+  id: string
+  session_id: string
+  pitch_item_id: string
+  user_id: string
+  created_at: string
+}

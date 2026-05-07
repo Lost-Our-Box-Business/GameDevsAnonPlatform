@@ -21,6 +21,9 @@ import { TasksAdmin } from './pages/admin/TasksAdmin'
 import { MembersAdmin } from './pages/admin/MembersAdmin'
 import { SocialAdmin } from './pages/admin/SocialAdmin'
 import { RevenueAdmin } from './pages/admin/RevenueAdmin'
+import { PitchAdmin } from './pages/admin/PitchAdmin'
+import { PitchList } from './pages/PitchList'
+import { PitchSessionPage } from './pages/PitchSession'
 
 export default function App() {
   return (
@@ -54,6 +57,12 @@ export default function App() {
             <ProtectedRoute><Profile /></ProtectedRoute>
           } />
 
+          {/* Pitch Day (login required) */}
+          <Route path="/pitch" element={<PitchList />} />
+          <Route path="/pitch/:sessionId" element={
+            <ProtectedRoute><PitchSessionPage /></ProtectedRoute>
+          } />
+
           {/* Admin */}
           <Route path="/admin" element={
             <ProtectedRoute adminOnly><AdminLayout /></ProtectedRoute>
@@ -66,6 +75,7 @@ export default function App() {
             <Route path="members" element={<MembersAdmin />} />
             <Route path="social" element={<SocialAdmin />} />
             <Route path="revenue" element={<RevenueAdmin />} />
+            <Route path="pitch" element={<PitchAdmin />} />
           </Route>
 
           {/* 404 */}
