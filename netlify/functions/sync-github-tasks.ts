@@ -175,14 +175,15 @@ export const handler: Handler = async (event) => {
         })
 
         const statusField = fieldNodes.find(
-          (fv: any) => fv?.field?.name?.toLowerCase() === 'status'
+          (fv: any) => fv?.field?.name?.toLowerCase() === 'status' && fv?.name !== undefined
         )
         const pointField = fieldNodes.find(
-          (fv: any) => fv?.field?.name?.toLowerCase() === 'point value'
+          (fv: any) => fv?.field?.name?.toLowerCase() === 'point value' && fv?.name !== undefined
         )
 
-        // Prefer GitHub's Point value field; fall back to manually-set Supabase value
-        const points = pointField?.number ?? pointsMap.get(issue.number) ?? 0
+        // Point value is a single-select field with option names like "1", "2", "3", "5", "8"
+        const githubPoints = pointField ? parseInt(pointField.name, 10) : NaN
+        const points = !isNaN(githubPoints) ? githubPoints : (pointsMap.get(issue.number) ?? 0)
 
         return {
           project_id: projectId,
