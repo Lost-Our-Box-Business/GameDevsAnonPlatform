@@ -141,6 +141,7 @@ export function Onboarding() {
       agreement_acknowledged_at: new Date().toISOString(),
       agreement_ip: ip,
       agreement_signature_url: signatureUrl,
+      agreement_text_snapshot: project!.profit_share_text ?? null,
     }).eq('project_id', project!.id).eq('user_id', session!.user.id)
 
     setSaving(false)
