@@ -201,11 +201,18 @@ export const handler: Handler = async (event) => {
       })
 
     if (taskRecords.length > 0) {
-      const { error: upsertError } = await supabase
+      // Delete all existing records for this project so stale/duplicate rows don't persist.
+      // pointsMap was already built above, so manually-set points are preserved via fallback.
+      const { error: deleteError } = await supabase
         .from('github_tasks')
-        .upsert(taskRecords, { onConflict: 'github_project_item_id' })
+        .delete()
+        .eq('project_id', projectId)
+      if (deleteError) throw deleteError
 
-      if (upsertError) throw upsertError
+      const { error: insertError } = await supabase
+        .from('github_tasks')
+        .insert(taskRecords)
+      if (insertError) throw insertError
     }
 
     return {
