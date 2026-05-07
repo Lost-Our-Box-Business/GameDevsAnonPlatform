@@ -73,7 +73,7 @@ export function MeetingsAdmin() {
               { label: 'Project *', key: 'project_id', type: 'select' },
               { label: 'Title *', key: 'title', type: 'text', placeholder: 'Planning Meeting 1' },
               { label: 'Date & Time *', key: 'date', type: 'datetime-local' },
-              { label: 'Location', key: 'location', type: 'text', placeholder: 'Orlando Public Library' },
+              { label: 'Location', key: 'location', type: 'text', placeholder: 'Lost Our Box Office, Plano TX' },
               { label: 'Meetup URL', key: 'meetup_url', type: 'url', placeholder: 'https://meetup.com/...' },
             ].map(field => (
               <div key={field.key}>

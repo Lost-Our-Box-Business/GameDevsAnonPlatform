@@ -68,7 +68,7 @@ export function Home() {
             <span className="text-purple-400">Share the win.</span>
           </h1>
           <p className="text-zinc-400 text-xl max-w-2xl mx-auto mb-10">
-            Lost Our Box is a weekly game development group in the Orlando area. We build complete, shippable games together and split the profits based on contribution.
+            Lost Our Box is a weekly game development group in Plano, TX. We build complete, shippable games together and split the profits based on contribution.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
