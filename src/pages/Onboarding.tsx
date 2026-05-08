@@ -108,13 +108,6 @@ export function Onboarding() {
     setStep(2)
   }
 
-  async function connectGitHub() {
-    await supabase.auth.linkIdentity({
-      provider: 'github',
-      options: { redirectTo: `${window.location.origin}/projects/${slug}/join` },
-    })
-  }
-
   async function saveStep2() {
     if (selectedRoles.length === 0) { setError('Please select at least one role.'); return }
     setSaving(true)
@@ -240,23 +233,13 @@ export function Onboarding() {
               </div>
               <div>
                 <label className="block text-zinc-400 text-sm mb-1">GitHub Account</label>
-                {githubUsername ? (
-                  <div className="flex items-center gap-3 bg-zinc-800 border border-emerald-500/40 rounded-lg px-3 py-2.5">
-                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span className="text-zinc-200 text-sm flex-1">@{githubUsername}</span>
-                    <button type="button" onClick={connectGitHub}
-                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-                      Reconnect
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={connectGitHub}
-                    className="flex items-center gap-2 w-full bg-zinc-800 border border-zinc-700 hover:border-zinc-500 rounded-lg px-3 py-2.5 text-zinc-400 hover:text-white transition-colors">
-                    <GitBranch className="w-4 h-4 flex-shrink-0" />
-                    <span className="text-sm">Connect GitHub Account</span>
-                    <ChevronRight className="w-4 h-4 ml-auto" />
-                  </button>
-                )}
+                <div className="flex items-center gap-3 bg-zinc-800 border border-emerald-500/40 rounded-lg px-3 py-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span className="text-zinc-200 text-sm flex-1">
+                    {githubUsername ? `@${githubUsername}` : 'Connected via GitHub sign-in'}
+                  </span>
+                  <span className="text-xs text-zinc-600">via GitHub sign-in</span>
+                </div>
                 <p className="text-zinc-600 text-xs mt-1.5">Used to automatically credit your completed tasks</p>
               </div>
               {error && <p className="text-red-400 text-sm">{error}</p>}
