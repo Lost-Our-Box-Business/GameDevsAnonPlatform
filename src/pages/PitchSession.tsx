@@ -85,8 +85,8 @@ function StarRow({ value, onChange }: { value: number; onChange: (v: number) => 
 }
 
 function InlineFeedbackForm({
-  item, sessionId, userId, existing, onSaved,
-}: { item: PitchItem; sessionId: string; userId: string; existing?: PitchFeedback; onSaved: () => void }) {
+  item, sessionId, userId, guestToken, existing, onSaved,
+}: { item: PitchItem; sessionId: string; userId: string | null; guestToken: string; existing?: PitchFeedback; onSaved: () => void }) {
   const [ratings, setRatings] = useState<Record<string, number>>(() =>
     existing ? {
       feasibility: existing.feasibility ?? 0, originality: existing.originality ?? 0,
@@ -100,10 +100,18 @@ function InlineFeedbackForm({
 
   async function submit() {
     setSaving(true)
-    await supabase.from('pitch_feedback').upsert({
-      session_id: sessionId, pitch_item_id: item.id, user_id: userId, ...ratings,
-      comments: comments || null,
-    }, { onConflict: 'pitch_item_id,user_id' })
+    const base = { session_id: sessionId, pitch_item_id: item.id, ...ratings, comments: comments || null }
+    if (userId) {
+      await supabase.from('pitch_feedback').upsert(
+        { ...base, user_id: userId },
+        { onConflict: 'pitch_item_id,user_id' }
+      )
+    } else {
+      await supabase.from('pitch_feedback').upsert(
+        { ...base, guest_token: guestToken },
+        { onConflict: 'pitch_item_id,guest_token' }
+      )
+    }
     setSaving(false)
     setSaved(true)
     onSaved()
@@ -148,6 +156,13 @@ export function PitchSessionPage() {
   const { user } = useAuth()
   const isAdmin = user?.is_admin ?? false
 
+  // Persistent guest token — used when not logged in
+  const [guestToken] = useState<string>(() => {
+    let token = localStorage.getItem('pitch_guest_token')
+    if (!token) { token = crypto.randomUUID(); localStorage.setItem('pitch_guest_token', token) }
+    return token
+  })
+
   const [session, setSession] = useState<PitchSession | null>(null)
   const [items, setItems] = useState<PitchItem[]>([])
   const [votes, setVotes] = useState<PitchVote[]>([])
@@ -178,12 +193,18 @@ export function PitchSessionPage() {
   }, [sessionId])
 
   const loadMyFeedback = useCallback(async () => {
-    if (!sessionId || !user) return
-    const { data } = await supabase.from('pitch_feedback').select('*').eq('session_id', sessionId).eq('user_id', user.id)
+    if (!sessionId) return
+    let query = supabase.from('pitch_feedback').select('*').eq('session_id', sessionId)
+    if (user) {
+      query = query.eq('user_id', user.id)
+    } else {
+      query = query.eq('guest_token', guestToken)
+    }
+    const { data } = await query
     const map: Record<string, PitchFeedback> = {}
     for (const f of (data ?? [])) map[f.pitch_item_id] = f
     setMyFeedback(map)
-  }, [sessionId, user])
+  }, [sessionId, user, guestToken])
 
   useEffect(() => {
     if (!sessionId) return
@@ -319,15 +340,30 @@ export function PitchSessionPage() {
   }
 
   // ── Voting ───────────────────────────────────────────────────────────────────
+  function myVote(itemId: string) {
+    return votes.find(v =>
+      v.pitch_item_id === itemId &&
+      (user ? v.user_id === user.id : v.guest_token === guestToken)
+    )
+  }
+
+  function myVoteCount() {
+    return votes.filter(v => user ? v.user_id === user.id : v.guest_token === guestToken).length
+  }
+
   async function toggleVote(item: PitchItem) {
-    if (!user || !sessionId) return
-    const existing = votes.find(v => v.pitch_item_id === item.id && v.user_id === user.id)
+    if (!sessionId) return
+    const existing = myVote(item.id)
     if (existing) {
       await supabase.from('pitch_votes').delete().eq('id', existing.id)
     } else {
-      const userVoteCount = votes.filter(v => v.user_id === user.id).length
-      if (userVoteCount >= (session?.votes_per_user ?? 1)) return
-      await supabase.from('pitch_votes').insert({ session_id: sessionId, pitch_item_id: item.id, user_id: user.id })
+      if (myVoteCount() >= (session?.votes_per_user ?? 1)) return
+      await supabase.from('pitch_votes').insert({
+        session_id: sessionId,
+        pitch_item_id: item.id,
+        user_id: user?.id ?? null,
+        guest_token: user ? null : guestToken,
+      })
     }
     loadVotes()
   }
@@ -337,7 +373,7 @@ export function PitchSessionPage() {
   const pitched = items.filter(it => it.pitched_at)
   const unpitched = items.filter(it => !it.pitched_at)
   const currentItem = items.find(it => it.id === session.current_pitch_item_id)
-  const userVoteCount = votes.filter(v => v.user_id === user?.id).length
+  const userVoteCount = myVoteCount()
   const totalVotes = votes.length
 
   return (
@@ -462,17 +498,14 @@ export function PitchSessionPage() {
               <h2 className="text-xl font-bold text-white mb-1">{currentItem.name}</h2>
               <p className="text-zinc-400 text-sm mb-5">by {currentItem.pitcher_name}</p>
 
-              {user ? (
-                <InlineFeedbackForm
-                  item={currentItem}
-                  sessionId={session.id}
-                  userId={user.id}
-                  existing={myFeedback[currentItem.id]}
-                  onSaved={loadMyFeedback}
-                />
-              ) : (
-                <p className="text-zinc-500 text-sm">Log in to submit feedback.</p>
-              )}
+              <InlineFeedbackForm
+                item={currentItem}
+                sessionId={session.id}
+                userId={user?.id ?? null}
+                guestToken={guestToken}
+                existing={myFeedback[currentItem.id]}
+                onSaved={loadMyFeedback}
+              />
 
               {isAdmin && (
                 <button onClick={donePitch} disabled={actionLoading}
@@ -557,7 +590,7 @@ export function PitchSessionPage() {
 
             <div className="grid sm:grid-cols-2 gap-3">
               {votingItems.map(it => {
-                const hasVoted = votes.some(v => v.pitch_item_id === it.id && v.user_id === user?.id)
+                const hasVoted = !!myVote(it.id)
                 const canVote = !hasVoted && userVoteCount < (session.votes_per_user ?? 1)
                 return (
                   <div key={it.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">

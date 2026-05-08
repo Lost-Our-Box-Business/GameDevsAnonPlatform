@@ -161,7 +161,8 @@ export interface PitchFeedback {
   id: string
   session_id: string
   pitch_item_id: string
-  user_id: string
+  user_id: string | null
+  guest_token: string | null
   feasibility: number | null
   originality: number | null
   money_potential: number | null
@@ -176,6 +177,7 @@ export interface PitchVote {
   id: string
   session_id: string
   pitch_item_id: string
-  user_id: string
+  user_id: string | null
+  guest_token: string | null
   created_at: string
 }

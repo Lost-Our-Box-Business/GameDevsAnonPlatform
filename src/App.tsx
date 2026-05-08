@@ -57,11 +57,9 @@ export default function App() {
             <ProtectedRoute><Profile /></ProtectedRoute>
           } />
 
-          {/* Pitch Day (login required) */}
+          {/* Pitch Day — public, guest voting allowed */}
           <Route path="/pitch" element={<PitchList />} />
-          <Route path="/pitch/:sessionId" element={
-            <ProtectedRoute><PitchSessionPage /></ProtectedRoute>
-          } />
+          <Route path="/pitch/:sessionId" element={<PitchSessionPage />} />
 
           {/* Admin */}
           <Route path="/admin" element={
