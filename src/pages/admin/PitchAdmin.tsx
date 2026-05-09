@@ -41,16 +41,26 @@ export function PitchAdmin() {
 
   async function downloadFeedbackCSV() {
     if (!selected) return
+    // Don't join users — PostgREST drops rows where user_id is null when using an embedded join.
+    // Fetch feedback and pitch_items separately, then resolve display names in a second query.
     const { data: feedback } = await supabase
       .from('pitch_feedback')
-      .select('*, users(display_name), pitch_items(name, pitcher_name)')
+      .select('*, pitch_items(name, pitcher_name)')
       .eq('session_id', selected.id)
     if (!feedback?.length) { alert('No feedback to export.'); return }
+
+    // Look up display names only for rows that have a user_id
+    const userIds = [...new Set(feedback.map(f => f.user_id).filter(Boolean))]
+    const { data: userRows } = userIds.length
+      ? await supabase.from('users').select('id, display_name').in('id', userIds)
+      : { data: [] }
+    const userMap = Object.fromEntries((userRows ?? []).map(u => [u.id, u.display_name]))
+
     const headers = ['Pitch', 'Pitcher', 'Respondent', 'Feasibility', 'Originality', 'Money Potential', 'Fun to Play', 'Fun to Make', 'Pitching Skills', 'Comments']
     const rows = feedback.map(f => [
       (f.pitch_items as any)?.name ?? '',
       (f.pitch_items as any)?.pitcher_name ?? '',
-      (f.users as any)?.display_name ?? 'Anonymous',
+      f.user_id ? (userMap[f.user_id] ?? 'Registered User') : 'Guest',
       f.feasibility ?? '',
       f.originality ?? '',
       f.money_potential ?? '',
