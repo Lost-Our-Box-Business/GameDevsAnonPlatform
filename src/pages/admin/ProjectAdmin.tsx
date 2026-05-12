@@ -81,7 +81,7 @@ export function ProjectAdmin() {
       { label: 'Hashtag', key: 'hashtag', type: 'text', placeholder: '#BulletBarrage' },
     ],
     content: [
-      { label: 'Game Design Document (Markdown)', key: 'gdd_content', type: 'textarea-large', placeholder: '# Game Design Document\n\n## Overview\n…', span: 2 },
+      { label: 'GDD URL (Google Doc)', key: 'gdd_content', type: 'url', placeholder: 'https://docs.google.com/…' },
       { label: 'Profit Share Agreement Text', key: 'profit_share_text', type: 'textarea-large', placeholder: 'This Profit Share Agreement…', span: 2 },
     ],
   }

@@ -203,11 +203,11 @@ export function Dashboard({ boardView = false }: Props) {
                   </a>
                 )}
                 {project.gdd_content && (
-                  <Link to={`/projects/${slug}/gdd`}
+                  <a href={project.gdd_content} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg px-3 py-2.5 transition-colors">
                     <FileText className="w-4 h-4 text-emerald-400" />
                     <span className="text-sm text-zinc-300">GDD</span>
-                  </Link>
+                  </a>
                 )}
               </div>
             </div>

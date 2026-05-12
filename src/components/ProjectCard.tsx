@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import type { Project } from '../types'
 import { ExternalLink, Gamepad2 } from 'lucide-react'
 
@@ -8,6 +8,8 @@ interface Props {
 }
 
 export function ProjectCard({ project, memberCount }: Props) {
+  const navigate = useNavigate()
+
   const statusColors = {
     active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     completed: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30',
@@ -15,7 +17,10 @@ export function ProjectCard({ project, memberCount }: Props) {
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition-colors group">
+    <div
+      className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition-colors group cursor-pointer"
+      onClick={() => navigate(`/projects/${project.slug}`)}
+    >
       <div className="aspect-video bg-zinc-800 relative overflow-hidden">
         {project.cover_image_url ? (
           <img
@@ -44,25 +49,17 @@ export function ProjectCard({ project, memberCount }: Props) {
           {memberCount !== undefined && (
             <span className="text-zinc-500 text-xs">{memberCount} members</span>
           )}
-          <div className="flex gap-2 ml-auto">
-            {project.status === 'completed' && project.steam_url && (
-              <a
-                href={project.steam_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-zinc-400 hover:text-white transition-colors"
-                onClick={e => e.stopPropagation()}
-              >
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            )}
-            <Link
-              to={`/projects/${project.slug}`}
-              className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-lg transition-colors"
+          {project.status === 'completed' && project.steam_url && (
+            <a
+              href={project.steam_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-400 hover:text-white transition-colors ml-auto"
+              onClick={e => e.stopPropagation()}
             >
-              {project.status === 'active' ? 'View' : 'Details'}
-            </Link>
-          </div>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
         </div>
       </div>
     </div>
