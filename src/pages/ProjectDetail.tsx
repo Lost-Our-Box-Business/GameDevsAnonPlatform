@@ -155,11 +155,11 @@ export function ProjectDetail() {
             </a>
           )}
           {project.gdd_content && (
-            <Link to={`/projects/${slug}/gdd`}
+            <a href={project.gdd_content} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors">
               <FileText className="w-5 h-5 text-emerald-400" />
               <span className="text-white text-sm font-medium">Game Design Doc</span>
-            </Link>
+            </a>
           )}
         </div>
       )}
