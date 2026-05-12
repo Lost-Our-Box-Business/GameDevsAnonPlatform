@@ -27,6 +27,14 @@ const ORG_PROJECT_QUERY = /* graphql */`
   query GetOrgProject($owner: String!, $number: Int!, $after: String) {
     organization(login: $owner) {
       projectV2(number: $number) {
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              name
+              options { name }
+            }
+          }
+        }
         items(first: 100, after: $after) {
           pageInfo { hasNextPage endCursor }
           nodes {
@@ -62,6 +70,14 @@ const USER_PROJECT_QUERY = /* graphql */`
   query GetUserProject($owner: String!, $number: Int!, $after: String) {
     user(login: $owner) {
       projectV2(number: $number) {
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              name
+              options { name }
+            }
+          }
+        }
         items(first: 100, after: $after) {
           pageInfo { hasNextPage endCursor }
           nodes {
@@ -125,6 +141,7 @@ export const handler: Handler = async (event) => {
     // Fetch all project items directly from the GitHub project board
     const items: any[] = []
     let after: string | null = null
+    let columnOrder: string[] | null = null
 
     do {
       const data = await githubGraphQL(query, {
@@ -134,6 +151,17 @@ export const handler: Handler = async (event) => {
       })
       const projectData = isOrg ? data.organization?.projectV2 : data.user?.projectV2
       if (!projectData) throw new Error('Project not found on GitHub — check owner, number, and owner type')
+
+      // Extract Status field column order on first page
+      if (columnOrder === null && projectData.fields?.nodes) {
+        const statusField = projectData.fields.nodes.find(
+          (f: any) => f?.name?.toLowerCase() === 'status' && Array.isArray(f?.options)
+        )
+        if (statusField) {
+          columnOrder = statusField.options.map((o: any) => o.name as string)
+        }
+      }
+
       const page = projectData.items
       if (!page) break
       items.push(...page.nodes)
@@ -216,12 +244,18 @@ export const handler: Handler = async (event) => {
       if (insertError) throw insertError
     }
 
+    // Persist column order so the frontend board matches GitHub's column sequence
+    if (columnOrder) {
+      await supabase.from('projects').update({ github_column_order: columnOrder }).eq('id', projectId)
+    }
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         synced: taskRecords.length,
         fields_found: Array.from(fieldsFound).sort(),
+        column_order: columnOrder,
       }),
     }
   } catch (err: any) {

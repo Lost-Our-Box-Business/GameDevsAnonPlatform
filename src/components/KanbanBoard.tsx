@@ -5,17 +5,19 @@ import { RefreshCw } from 'lucide-react'
 interface Props {
   tasks: GitHubTask[]
   projectId: string
+  columnOrder?: string[] | null
   onSync?: () => void
   syncing?: boolean
 }
 
-const COLUMN_ORDER = ['Todo', 'In Progress', 'In Review', 'Blocked', 'Done']
+const COLUMN_ORDER_FALLBACK = ['Todo', 'In Progress', 'In Review', 'Blocked', 'Done']
 
-export function KanbanBoard({ tasks, projectId: _projectId, onSync, syncing }: Props) {
+export function KanbanBoard({ tasks, projectId: _projectId, columnOrder, onSync, syncing }: Props) {
+  const order = columnOrder?.length ? columnOrder : COLUMN_ORDER_FALLBACK
   const statuses = [...new Set(tasks.map(t => t.status ?? 'No Status'))]
   const orderedStatuses = [
-    ...COLUMN_ORDER.filter(s => statuses.includes(s)),
-    ...statuses.filter(s => !COLUMN_ORDER.includes(s)),
+    ...order.filter(s => statuses.includes(s)),
+    ...statuses.filter(s => !order.includes(s)),
   ]
 
   const columns = orderedStatuses.map(status => ({

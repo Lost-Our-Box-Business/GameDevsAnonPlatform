@@ -141,7 +141,7 @@ export function Dashboard({ boardView = false }: Props) {
       </div>
 
       {boardView ? (
-        <KanbanBoard tasks={allTasks} projectId={project.id} onSync={syncGitHub} syncing={syncing} />
+        <KanbanBoard tasks={allTasks} projectId={project.id} columnOrder={project.github_column_order} onSync={syncGitHub} syncing={syncing} />
       ) : (
         <div className="space-y-6">
           {/* Next meeting */}

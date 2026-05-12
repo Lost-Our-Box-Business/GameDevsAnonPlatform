@@ -25,6 +25,7 @@ export interface Project {
   github_repo_name: string | null
   github_project_number: number | null
   github_project_owner_type: string
+  github_column_order: string[] | null
   drive_folder_url: string | null
   discord_invite_url: string | null
   discord_channel_id: string | null
