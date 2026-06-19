@@ -45,6 +45,10 @@ export function Dashboard({ boardView = false }: Props) {
       window.location.href = `/projects/${slug}/join`
       return
     }
+    if (!mem.agreement_signature_url) {
+      window.location.href = `/projects/${slug}/join`
+      return
+    }
 
     setProject(proj)
     setMembership(mem)

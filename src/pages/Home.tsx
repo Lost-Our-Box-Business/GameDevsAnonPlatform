@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Project } from '../types'
 import { ProjectCard } from '../components/ProjectCard'
 import { Gamepad2, Users, Trophy, Zap, Calendar, ExternalLink } from 'lucide-react'
+import { useAuthContext } from '../contexts/AuthContext'
 
 const HOW_IT_WORKS = [
   {
@@ -29,9 +30,11 @@ const HOW_IT_WORKS = [
 ]
 
 export function Home() {
+  const { session } = useAuthContext()
   const [activeProjects, setActiveProjects] = useState<Project[]>([])
   const [completedProjects, setCompletedProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [isMember, setIsMember] = useState(false)
 
   useEffect(() => {
     async function fetchProjects() {
@@ -44,11 +47,24 @@ export function Home() {
       if (data) {
         setActiveProjects(data.filter(p => p.status === 'active'))
         setCompletedProjects(data.filter(p => p.status === 'completed'))
+
+        if (session) {
+          const featured = data.find(p => p.status === 'active')
+          if (featured) {
+            const { data: mem } = await supabase
+              .from('project_members')
+              .select('id')
+              .eq('project_id', featured.id)
+              .eq('user_id', session.user.id)
+              .maybeSingle()
+            setIsMember(!!mem)
+          }
+        }
       }
       setLoading(false)
     }
     fetchProjects()
-  }, [])
+  }, [session])
 
   const featuredProject = activeProjects[0]
 
@@ -130,7 +146,7 @@ export function Home() {
                     to={`/projects/${featuredProject.slug}/join`}
                     className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white font-medium px-6 py-2 rounded-lg transition-colors"
                   >
-                    Join Project
+                    {isMember ? 'Go To Project' : 'Join Project'}
                   </Link>
                 </div>
               </div>

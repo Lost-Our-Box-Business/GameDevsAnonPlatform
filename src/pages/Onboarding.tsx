@@ -28,6 +28,7 @@ export function Onboarding() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [needsResign, setNeedsResign] = useState(false)
 
   // Step 1 fields
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
@@ -80,10 +81,16 @@ export function Onboarding() {
         .maybeSingle()
 
       if (existing?.onboarding_completed_at) {
-        navigate(`/projects/${slug}/dashboard`)
-        return
+        if (!existing.agreement_signature_url) {
+          setNeedsResign(true)
+          setStep(3) // fall through to setLoading(false)
+        } else {
+          navigate(`/projects/${slug}/dashboard`)
+          return
+        }
+      } else if (existing) {
+        setStep(2)
       }
-      if (existing) setStep(2)
 
       setLoading(false)
     }
@@ -300,6 +307,12 @@ export function Onboarding() {
         {/* Step 3: Agreement */}
         {step === 3 && (
           <div>
+            {needsResign && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-5 text-sm text-amber-300">
+                We're sorry for the inconvenience — it looks like something went wrong when your agreement was originally saved.
+                Nothing has changed with your agreement, we just need you to re-sign so we have your signature on file.
+              </div>
+            )}
             <h2 className="text-xl font-bold text-white mb-1">Profit Share Agreement</h2>
             <p className="text-zinc-400 text-sm mb-4">
               Read the agreement below, then draw your signature to acknowledge and agree.
