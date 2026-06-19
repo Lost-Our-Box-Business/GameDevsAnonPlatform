@@ -32,6 +32,7 @@ export function Onboarding() {
   // Step 1 fields
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
   const [discordName, setDiscordName] = useState(user?.discord_name ?? '')
+  const [discordUserId, setDiscordUserId] = useState(user?.discord_user_id ?? '')
   const [githubUsername, setGitBranchUsername] = useState(user?.github_username ?? '')
 
   // Step 2 fields
@@ -102,6 +103,7 @@ export function Onboarding() {
     await supabase.from('users').update({
       display_name: displayName.trim(),
       discord_name: discordName.trim() || null,
+      discord_user_id: discordUserId.trim() || null,
       github_username: githubUsername.trim() || null,
     }).eq('id', session!.user.id)
     setSaving(false)
@@ -165,6 +167,12 @@ export function Onboarding() {
     await supabase.from('project_members').update({
       onboarding_completed_at: new Date().toISOString(),
     }).eq('project_id', project!.id).eq('user_id', session!.user.id)
+    // Fire-and-forget: assign GitHub team + Discord role — failures don't block onboarding
+    fetch('/.netlify/functions/assign-member', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session!.access_token}` },
+      body: JSON.stringify({ project_id: project!.id, user_id: session!.user.id }),
+    }).catch(() => {})
     navigate(`/projects/${slug}/dashboard`)
   }
 
@@ -228,8 +236,15 @@ export function Onboarding() {
               <div>
                 <label className="block text-zinc-400 text-sm mb-1">Discord Username</label>
                 <input value={discordName} onChange={e => setDiscordName(e.target.value)}
-                  placeholder="e.g. brandon#1234"
+                  placeholder="e.g. brandon"
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-zinc-400 text-sm mb-1">Discord User ID</label>
+                <input value={discordUserId} onChange={e => setDiscordUserId(e.target.value)}
+                  placeholder="e.g. 123456789012345678"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors" />
+                <p className="text-zinc-600 text-xs mt-1.5">In Discord: Settings → Advanced → enable Developer Mode, then right-click your name → Copy User ID</p>
               </div>
               <div>
                 <label className="block text-zinc-400 text-sm mb-1">GitHub Account</label>

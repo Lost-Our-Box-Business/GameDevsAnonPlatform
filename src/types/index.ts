@@ -7,6 +7,7 @@ export interface User {
   id: string
   display_name: string
   discord_name: string | null
+  discord_user_id: string | null
   github_username: string | null
   is_admin: boolean
   created_at: string
@@ -26,9 +27,11 @@ export interface Project {
   github_project_number: number | null
   github_project_owner_type: string
   github_column_order: string[] | null
+  github_team_slug: string | null
   drive_folder_url: string | null
   discord_invite_url: string | null
   discord_channel_id: string | null
+  discord_role_id: string | null
   hashtag: string | null
   gdd_content: string | null
   profit_share_text: string | null

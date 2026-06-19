@@ -77,6 +77,8 @@ export function ProjectAdmin() {
       { label: 'Owner Type', key: 'github_project_owner_type', type: 'select', options: ['user', 'org'] },
       { label: 'Discord Channel ID', key: 'discord_channel_id', type: 'text', placeholder: '1234567890' },
       { label: 'Discord Invite URL', key: 'discord_invite_url', type: 'url', placeholder: 'https://discord.gg/…' },
+      { label: 'Discord Role ID', key: 'discord_role_id', type: 'text', placeholder: '1234567890123456789' },
+      { label: 'GitHub Team Slug', key: 'github_team_slug', type: 'text', placeholder: 'bullet-barrage-programmers' },
       { label: 'Google Drive URL', key: 'drive_folder_url', type: 'url', placeholder: 'https://drive.google.com/…' },
       { label: 'Hashtag', key: 'hashtag', type: 'text', placeholder: '#BulletBarrage' },
     ],
