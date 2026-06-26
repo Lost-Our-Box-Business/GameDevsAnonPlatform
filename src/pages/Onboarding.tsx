@@ -153,11 +153,14 @@ export function Onboarding() {
       .from('agreements')
       .upload(path, blob, { contentType: 'image/png', upsert: true })
 
-    let signatureUrl: string | null = null
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage.from('agreements').getPublicUrl(path)
-      signatureUrl = urlData.publicUrl
+    if (uploadError) {
+      setError('Failed to save your signature. Please try again.')
+      setSaving(false)
+      return
     }
+
+    const { data: urlData } = supabase.storage.from('agreements').getPublicUrl(path)
+    const signatureUrl = urlData.publicUrl
 
     await supabase.from('project_members').update({
       agreement_acknowledged_at: new Date().toISOString(),
