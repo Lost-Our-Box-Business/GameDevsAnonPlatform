@@ -143,24 +143,25 @@ export function Onboarding() {
       .then(d => d.ip)
       .catch(() => 'unknown')
 
-    // Convert canvas to PNG blob and upload to Supabase Storage
     const dataUrl = sigCanvas.current!.toDataURL('image/png')
-    const res = await fetch(dataUrl)
-    const blob = await res.blob()
-    const path = `${project!.id}/${session!.user.id}.png`
+    const base64 = dataUrl.split(',')[1]
 
-    const { error: uploadError } = await supabase.storage
-      .from('agreements')
-      .upload(path, blob, { contentType: 'image/png', upsert: true })
+    const uploadRes = await fetch('/.netlify/functions/upload-signature', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session!.access_token}`,
+      },
+      body: JSON.stringify({ project_id: project!.id, image_base64: base64 }),
+    })
 
-    if (uploadError) {
+    if (!uploadRes.ok) {
       setError('Failed to save your signature. Please try again.')
       setSaving(false)
       return
     }
 
-    const { data: urlData } = supabase.storage.from('agreements').getPublicUrl(path)
-    const signatureUrl = urlData.publicUrl
+    const { url: signatureUrl } = await uploadRes.json()
 
     await supabase.from('project_members').update({
       agreement_acknowledged_at: new Date().toISOString(),
